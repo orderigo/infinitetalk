@@ -193,30 +193,38 @@ def get_videos(ws, prompt, input_type="image", person_count="single"):
     for node_id in history["outputs"]:
         node_output = history["outputs"][node_id]
         videos_output = []
-        if "gifs" in node_output:
-            logger.info(
-                f"노드 {node_id}에서 {len(node_output['gifs'])}개의 비디오 발견"
-            )
-            for idx, video in enumerate(node_output["gifs"]):
-                # fullpath를 그대로 반환 (base64 인코딩하지 않음)
-                video_path = video["fullpath"]
+        video_entries = node_output.get("gifs", []) or node_output.get("videos", [])
+        if video_entries:
+            logger.info(f"노드 {node_id}에서 {len(video_entries)}개의 비디오 발견")
+            for idx, video in enumerate(video_entries):
+                video_path = video.get("fullpath")
+                if not video_path:
+                    filename = video.get("filename")
+                    subfolder = video.get("subfolder", "")
+                    output_type = video.get("type", "output")
+                    root = "/ComfyUI/output" if output_type == "output" else "/ComfyUI/temp"
+                    if filename:
+                        video_path = os.path.join(root, subfolder, filename)
+                if not video_path:
+                    logger.warning(f"노드 {node_id}의 비디오 메타데이터에 경로가 없습니다: {video}")
+                    continue
                 logger.info(f"비디오 파일 경로: {video_path}")
-
-                # 파일 존재 여부 및 크기 확인
                 if os.path.exists(video_path):
                     file_size = os.path.getsize(video_path)
-                    logger.info(
-                        f"비디오 {idx+1} 발견: {video_path} (크기: {file_size} bytes)"
-                    )
+                    logger.info(f"비디오 {idx+1} 발견: {video_path} (크기: {file_size} bytes)")
+                    videos_output.append(video_path)
                 else:
                     logger.warning(f"비디오 파일이 존재하지 않습니다: {video_path}")
-
-                videos_output.append(video_path)
         else:
             logger.info(f"노드 {node_id}에 비디오 출력 없음")
         output_videos[node_id] = videos_output
 
-    logger.info(f"총 {len(output_videos)}개 노드에서 비디오 파일 경로 수집 완료")
+    logger.info(f"총 {len(output_videos)}개 노드에서 비디오 경로 수집 완료")
+    if not any(output_videos.values()):
+        raise RuntimeError(
+            f"Video output metadata was empty or files were missing. "
+            f"Output nodes: {list(history['outputs'].keys())}"
+        )
     return output_videos
 
 
