@@ -195,7 +195,21 @@ def get_videos(ws, prompt, input_type="image", person_count="single"):
             continue
 
     logger.info(f"히스토리 조회 중: prompt_id={prompt_id}")
-    history = get_history(prompt_id)[prompt_id]
+    history = None
+    # ComfyUI can emit the final WebSocket event just before its history
+    # record is fully persisted. Poll briefly so a valid output node is not
+    # mistaken for an empty result.
+    for attempt in range(30):
+        history_response = get_history(prompt_id)
+        history = history_response.get(prompt_id)
+        if history is not None:
+            candidate_outputs = history.get("outputs", {})
+            candidate_status = history.get("status", {})
+            if candidate_outputs or candidate_status.get("completed") is True:
+                break
+        time.sleep(1)
+    if history is None:
+        raise RuntimeError(f"ComfyUI history was not available for prompt {prompt_id}")
     history_outputs = history.get("outputs", {})
     history_status = history.get("status", {})
     logger.info(f"출력 노드 수: {len(history_outputs)}")
