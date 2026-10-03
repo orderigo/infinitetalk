@@ -11,6 +11,7 @@ import binascii  # Base64 에러 처리를 위해 import
 import subprocess
 import librosa
 import shutil
+import time
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -134,14 +135,17 @@ def queue_prompt(prompt, input_type="image", person_count="single"):
     req.add_header("Content-Type", "application/json")
 
     try:
-        response = urllib.request.urlopen(req)
+        response = urllib.request.urlopen(req, timeout=30)
         result = json.loads(response.read())
         logger.info(f"프롬프트 전송 성공: {result}")
         return result
     except urllib.error.HTTPError as e:
         logger.error(f"HTTP 에러 발생: {e.code} - {e.reason}")
-        logger.error(f"응답 내용: {e.read().decode('utf-8')}")
-        raise
+        response_body = e.read().decode("utf-8", errors="replace")
+        logger.error(f"응답 내용: {response_body}")
+        raise RuntimeError(
+            f"ComfyUI prompt validation failed ({e.code}): {response_body[:4000]}"
+        ) from e
     except Exception as e:
         logger.error(f"프롬프트 전송 중 오류: {e}")
         raise
