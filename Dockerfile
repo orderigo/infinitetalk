@@ -9,8 +9,10 @@ RUN pip install runpod websocket-client librosa
 
 WORKDIR /
 
+ARG COMFYUI_REF=b0d9708974f50fce7d2448ac84e9260c87f7ade3
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git && \
     cd /ComfyUI && \
+    git checkout ${COMFYUI_REF} && \
     pip install -r requirements.txt
 
 RUN cd /ComfyUI/custom_nodes && \
