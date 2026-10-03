@@ -172,11 +172,19 @@ def get_videos(ws, prompt, input_type="image", person_count="single"):
     logger.info(f"워크플로우 실행 시작: prompt_id={prompt_id}")
 
     output_videos = {}
+    execution_error = None
     while True:
         out = ws.recv()
         if isinstance(out, str):
             message = json.loads(out)
-            if message["type"] == "executing":
+            message_type = message.get("type")
+            if message_type == "execution_error":
+                execution_error = message.get("data", {})
+                logger.error(f"ComfyUI execution error: {execution_error}")
+            elif message_type == "execution_interrupted":
+                execution_error = message.get("data", {})
+                logger.error(f"ComfyUI execution interrupted: {execution_error}")
+            elif message_type == "executing":
                 data = message["data"]
                 if data["node"] is not None:
                     logger.info(f"노드 실행 중: {data['node']}")
@@ -188,10 +196,22 @@ def get_videos(ws, prompt, input_type="image", person_count="single"):
 
     logger.info(f"히스토리 조회 중: prompt_id={prompt_id}")
     history = get_history(prompt_id)[prompt_id]
-    logger.info(f"출력 노드 수: {len(history['outputs'])}")
+    history_outputs = history.get("outputs", {})
+    history_status = history.get("status", {})
+    logger.info(f"출력 노드 수: {len(history_outputs)}")
+    logger.info(f"ComfyUI history status: {history_status}")
 
-    for node_id in history["outputs"]:
-        node_output = history["outputs"][node_id]
+    if execution_error:
+        raise RuntimeError(f"ComfyUI execution failed: {json.dumps(execution_error)[:6000]}")
+
+    if history_status.get("status_str") not in (None, "success"):
+        raise RuntimeError(
+            f"ComfyUI history status was {history_status.get('status_str')}: "
+            f"{json.dumps(history_status)[:6000]}"
+        )
+
+    for node_id in history_outputs:
+        node_output = history_outputs[node_id]
         videos_output = []
         video_entries = node_output.get("gifs", []) or node_output.get("videos", [])
         if video_entries:
@@ -223,7 +243,8 @@ def get_videos(ws, prompt, input_type="image", person_count="single"):
     if not any(output_videos.values()):
         raise RuntimeError(
             f"Video output metadata was empty or files were missing. "
-            f"Output nodes: {list(history['outputs'].keys())}"
+            f"Output nodes: {list(history_outputs.keys())}; "
+            f"history status: {json.dumps(history_status)[:2000]}"
         )
     return output_videos
 
