@@ -416,6 +416,14 @@ def handler(job):
 
     prompt = load_workflow(workflow_path)
 
+    # Always write this job's result to a unique persistent output location.
+    # This prevents stale/sample files from being returned by a reused worker.
+    output_node = prompt.get("131")
+    if not output_node or output_node.get("class_type") != "VHS_VideoCombine":
+        raise RuntimeError("InfiniteTalk workflow is missing VHS_VideoCombine output node 131")
+    output_node["inputs"]["save_output"] = True
+    output_node["inputs"]["filename_prefix"] = f"WaloneInfiniteTalk/{task_id}"
+
     # ------------------------------------------------------------------
     # 동적 Force Offload 설정
     # ------------------------------------------------------------------
@@ -541,16 +549,23 @@ def handler(job):
     logger.info("출력 비디오 검색 중...")
 
     for node_id in videos:
-        if videos[node_id]:
-            output_video_path = videos[node_id][0]
-            logger.info(f"노드 {node_id}에서 출력 비디오 발견: {output_video_path}")
+        for candidate in videos[node_id]:
+            candidate_path = os.path.abspath(candidate)
+            # Only accept the unique path created for this request. Never fall
+            # back to an example/sample file or an output from another job.
+            if task_id not in candidate_path or "/examples/" in candidate_path:
+                logger.warning(f"Ignoring non-current/sample output: {candidate_path}")
+                continue
+            output_video_path = candidate_path
+            logger.info(f"노드 {node_id}에서 현재 작업의 생성 비디오 발견: {output_video_path}")
             break
-        else:
-            logger.info(f"노드 {node_id}는 비어있음")
+        if output_video_path:
+            break
+        logger.info(f"노드 {node_id}는 현재 작업의 비디오가 없음")
 
     if not output_video_path:
         logger.error("출력 비디오를 찾을 수 없습니다. 모든 노드가 비어있습니다.")
-        return {"error": "비디오를 찾을 수 없습니다."}
+        return {"error": "현재 작업에서 생성된 비디오를 찾을 수 없습니다. Sample/default output was rejected."}
 
     # 비디오 파일 존재 여부 확인
     if not os.path.exists(output_video_path):
