@@ -43,9 +43,11 @@ RUN cd /ComfyUI/custom_nodes && \
     cd ComfyUI-MelBandRoFormer && \
     pip install -r requirements.txt
 
+ARG WANVIDEO_WRAPPER_REF=088128b224242e110d3906c6750e9a3a348a659b
 RUN cd /ComfyUI/custom_nodes && \
     git clone https://github.com/kijai/ComfyUI-WanVideoWrapper && \
     cd ComfyUI-WanVideoWrapper && \
+    git checkout ${WANVIDEO_WRAPPER_REF} && \
     pip install -r requirements.txt
 
 
