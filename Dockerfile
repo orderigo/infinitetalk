@@ -50,6 +50,20 @@ RUN cd /ComfyUI/custom_nodes && \
     git checkout ${WANVIDEO_WRAPPER_REF} && \
     pip install -r requirements.txt
 
+# MultiTalk requires all Wav2Vec encoder hidden states. Keep this explicit so
+# a transformers/config default cannot silently return hidden_states=None.
+RUN python3 - <<'PY'
+from pathlib import Path
+
+path = Path('/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/multitalk/nodes.py')
+source = path.read_text()
+needle = 'wav2vec2_config = Wav2Vec2Config(**json.load(open(config_path)))'
+replacement = needle + '\n        wav2vec2_config.output_hidden_states = True'
+if needle not in source:
+    raise SystemExit('WanVideoWrapper Wav2Vec config line was not found')
+path.write_text(source.replace(needle, replacement, 1))
+PY
+
 
 # RUN wget -q https://huggingface.co/Kijai/WanVideo_comfy_GGUF/resolve/main/InfiniteTalk/Wan2_1-InfiniteTalk_Single_Q8.gguf -O /ComfyUI/models/diffusion_models/Wan2_1-InfiniteTalk_Single_Q8.gguf
 # RUN wget -q https://huggingface.co/Kijai/WanVideo_comfy_GGUF/resolve/main/InfiniteTalk/Wan2_1-InfiniteTalk_Multi_Q8.gguf -O /ComfyUI/models/diffusion_models/Wan2_1-InfiniteTalk_Multi_Q8.gguf
